@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useCallback } from "react";
 import "./App.css";
 
-import { shuffleArray, buildIndexes, isTrap3, isTrap4, getSpamGroups } from "./utils/wordlogic";
+import { shuffleArray, buildIndexes, isTrapEnding, getSpamGroups } from "./utils/wordlogic";
 import rawWords from "./data/words.txt?raw";
 
 const MAX_RESULTS = 20;
@@ -10,15 +10,15 @@ function App() {
   const [search, setSearch] = useState("");
   const inputRef = useRef(null);
 
-  // Parse and index words ONCE
-  const { words, ending3, ending4 } = useMemo(() => {
+  // Parse and build prefix indexes ONCE
+  const { words, prefix3, prefix4 } = useMemo(() => {
     const parsed = rawWords
       .split(/\r?\n/)
       .map((w) => w.trim().toLowerCase())
       .filter((w) => w.length >= 3 && /^[a-z]+$/.test(w));
 
-    const { ending3, ending4 } = buildIndexes(parsed);
-    return { words: parsed, ending3, ending4 };
+    const { prefix3, prefix4 } = buildIndexes(parsed);
+    return { words: parsed, prefix3, prefix4 };
   }, []);
 
   // INSTANT search
@@ -38,24 +38,36 @@ function App() {
     return shuffleArray(result).slice(0, 400);
   }, [query, suffixMode, words]);
 
-  // Categorize - check traps PER WORD using indexes
+  // Categorize
   const normalSolves = useMemo(() => {
     return filtered
       .filter((w) => w.length <= 9)
       .slice(0, MAX_RESULTS);
   }, [filtered]);
 
+  // 3-LETTER TRAPS: word's last 3 letters are a trap ending
+  // Trap = ALL words STARTING with those 3 letters are >= 5 letters long
   const trap3 = useMemo(() => {
     return filtered
-      .filter((w) => isTrap3(w, ending3))
+      .filter((w) => {
+        if (w.length < 5) return false;
+        const ending = w.slice(-3);
+        return isTrapEnding(prefix3, ending);
+      })
       .slice(0, MAX_RESULTS);
-  }, [filtered, ending3]);
+  }, [filtered, prefix3]);
 
+  // 4-LETTER TRAPS: word's last 4 letters are a trap ending
+  // Trap = ALL words STARTING with those 4 letters are >= 6 letters long
   const trap4 = useMemo(() => {
     return filtered
-      .filter((w) => isTrap4(w, ending4))
+      .filter((w) => {
+        if (w.length < 6) return false;
+        const ending = w.slice(-4);
+        return isTrapEnding(prefix4, ending);
+      })
       .slice(0, MAX_RESULTS);
-  }, [filtered, ending4]);
+  }, [filtered, prefix4]);
 
   const spamGroups = useMemo(() => {
     return getSpamGroups(filtered, 20, 10);
@@ -118,7 +130,7 @@ function App() {
               <span className="empty">No 3-letter traps</span>
             ) : (
               trap3.map((word, i) => (
-                <span key={i} className="word trap3" title={`Ending: ${word.slice(-3)} | Length: ${word.length}`}>
+                <span key={i} className="word trap3" title={`Trap ending: ${word.slice(-3)} | Opponent must play >= 5 letters`}>
                   {word}
                 </span>
               ))
@@ -133,7 +145,7 @@ function App() {
               <span className="empty">No 4-letter traps</span>
             ) : (
               trap4.map((word, i) => (
-                <span key={i} className="word trap4" title={`Ending: ${word.slice(-4)} | Length: ${word.length}`}>
+                <span key={i} className="word trap4" title={`Trap ending: ${word.slice(-4)} | Opponent must play >= 6 letters`}>
                   {word}
                 </span>
               ))
