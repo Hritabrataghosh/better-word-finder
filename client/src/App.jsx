@@ -1,0 +1,189 @@
+import { useMemo, useState, useRef, useCallback } from "react";
+import "./App.css";
+
+import { shuffleArray, buildIndexes, getWordTraps, getSpamGroups } from "./utils/wordLogic";
+import rawWords from "./data/words.txt?raw";
+
+const MAX_RESULTS = 20; // Max 20 per section
+
+function App() {
+  const [search, setSearch] = useState("");
+  const inputRef = useRef(null);
+
+  // Parse and pre-index words ONCE
+  const { words, trap3Endings, trap4Endings } = useMemo(() => {
+    const parsed = rawWords
+      .split(/\r?\n/)
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => w.length >= 3 && /^[a-z]+$/.test(w));
+
+    const { trap3Endings, trap4Endings } = buildIndexes(parsed);
+    return { words: parsed, trap3Endings, trap4Endings };
+  }, []);
+
+  // INSTANT search - no debounce
+  const suffixMode = search.startsWith(" ");
+  const query = search.trim().toLowerCase();
+
+  const filtered = useMemo(() => {
+    if (!query) return [];
+
+    let result;
+    if (suffixMode) {
+      result = words.filter((word) => word.endsWith(query));
+    } else {
+      result = words.filter((word) => word.startsWith(query));
+    }
+
+    return shuffleArray(result).slice(0, 300); // Get more for spam detection
+  }, [query, suffixMode, words]);
+
+  // Categorize into sections (max 20 each)
+  const normalSolves = useMemo(() => {
+    return filtered
+      .filter((w) => w.length <= 9)
+      .slice(0, MAX_RESULTS);
+  }, [filtered]);
+
+  const trap3 = useMemo(() => {
+    return filtered
+      .filter((w) => {
+        if (w.length < 5) return false;
+        const e3 = w.slice(-3);
+        return trap3Endings.has(e3);
+      })
+      .slice(0, MAX_RESULTS);
+  }, [filtered, trap3Endings]);
+
+  const trap4 = useMemo(() => {
+    return filtered
+      .filter((w) => {
+        if (w.length < 6) return false;
+        const e4 = w.slice(-4);
+        return trap4Endings.has(e4);
+      })
+      .slice(0, MAX_RESULTS);
+  }, [filtered, trap4Endings]);
+
+  // Spam: actual words grouped by endings
+  const spamGroups = useMemo(() => {
+    return getSpamGroups(filtered, 20, 15);
+  }, [filtered]);
+
+  // Quick delete: clear on focus if has text
+  const handleFocus = useCallback(() => {
+    if (search.length > 0) {
+      setSearch("");
+    }
+  }, [search]);
+
+  const handleDoubleClick = useCallback(() => {
+    setSearch("");
+    inputRef.current?.focus();
+  }, []);
+
+  return (
+    <div className="app">
+      <h1>🔍 BETTER WORD FINDER</h1>
+
+      <div className="searchBox">
+        <input
+          ref={inputRef}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onFocus={handleFocus}
+          onDoubleClick={handleDoubleClick}
+          placeholder='Search... (" abc" = suffix)  👆 Click-out & in = clear'
+          autoFocus
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="stats-bar">
+        <span>Query: <b>{query || "—"}</b></span>
+        <span>Normal: <b>{normalSolves.length}</b></span>
+        <span>3L Traps: <b className="t3">{trap3.length}</b></span>
+        <span>4L Traps: <b className="t4">{trap4.length}</b></span>
+        <span>Spam: <b>{spamGroups.length}</b></span>
+      </div>
+
+      {/* VERTICAL LAYOUT */}
+      <div className="vertical-layout">
+        
+        {/* NORMAL SOLVES */}
+        <section className="section normal-section">
+          <h2>✅ NORMAL SOLVES <span className="count">({normalSolves.length})</span></h2>
+          <div className="word-row">
+            {normalSolves.length === 0 ? (
+              <span className="empty">No normal solves</span>
+            ) : (
+              normalSolves.map((word, i) => (
+                <span key={i} className="word normal">{word}</span>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* 3-LETTER TRAPS */}
+        <section className="section trap3-section">
+          <h2>⚠️ 3 LETTER TRAPS <span className="count">({trap3.length})</span></h2>
+          <div className="word-row">
+            {trap3.length === 0 ? (
+              <span className="empty">No 3-letter traps</span>
+            ) : (
+              trap3.map((word, i) => (
+                <span key={i} className="word trap3" title={`Trap ending: ${word.slice(-3)}`}>
+                  {word}
+                </span>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* 4-LETTER TRAPS */}
+        <section className="section trap4-section">
+          <h2>🚨 4 LETTER TRAPS <span className="count">({trap4.length})</span></h2>
+          <div className="word-row">
+            {trap4.length === 0 ? (
+              <span className="empty">No 4-letter traps</span>
+            ) : (
+              trap4.map((word, i) => (
+                <span key={i} className="word trap4" title={`Trap ending: ${word.slice(-4)}`}>
+                  {word}
+                </span>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* SPAM WORDS */}
+        <section className="section spam-section">
+          <h2>📊 SPAM WORDS <span className="count">({spamGroups.length} groups)</span></h2>
+          <div className="spam-container">
+            {spamGroups.length === 0 ? (
+              <span className="empty">No spam patterns</span>
+            ) : (
+              spamGroups.map((group, gi) => (
+                <div key={gi} className="spam-group">
+                  <div className="spam-header">
+                    <span className="spam-ending">{group.ending}</span>
+                    <span className="spam-count">{group.count}x</span>
+                  </div>
+                  <div className="spam-words">
+                    {group.words.map((word, wi) => (
+                      <span key={wi} className="word spam">{word}</span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+      </div>
+    </div>
+  );
+}
+
+export default App;
