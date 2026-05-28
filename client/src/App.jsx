@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useCallback } from "react";
 import "./App.css";
 
-import { shuffleArray, buildIndexes, getSpamGroups } from "./utils/wordLogic";
+import { shuffleArray, buildIndexes, getSpamGroups } from "./utils/wordlogic";
 import rawWords from "./data/words.txt?raw";
 
 const MAX_RESULTS = 20;
